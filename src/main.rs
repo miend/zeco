@@ -1,10 +1,17 @@
-use std::process::exit;
-
-use clap::Parser;
 mod guarded_socket;
 mod handshake;
 mod protocol;
 mod zellij;
+
+use std::process::exit;
+
+use anyhow::{Context, Result};
+use clap::Parser;
+use tokio::{
+    select,
+    signal::{self, unix::SignalKind},
+};
+use tokio_util::sync::CancellationToken;
 
 #[derive(Debug, Parser)]
 pub struct JoinArgs {
@@ -23,13 +30,31 @@ pub enum Command {
 #[tokio::main]
 async fn main() {
     let args = Command::parse();
+    let cancellation_token = CancellationToken::new();
+    tokio::spawn(listen_for_shutdown(cancellation_token.clone()));
     let res = match args {
-        Command::Host => handshake::handshake_host().await,
-        Command::Join(args) => handshake::handshake_guest(&args.host, &args.secret).await,
+        Command::Host => handshake::handshake_host(&cancellation_token).await,
+        Command::Join(args) => {
+            handshake::handshake_guest(&args.host, &args.secret, &cancellation_token).await
+        }
     };
     if let Err(e) = res {
         println!("Error, terminated due to:");
         println!("{e:#}");
         exit(1);
     }
+}
+
+async fn listen_for_shutdown(cancellation_token: CancellationToken) -> Result<()> {
+    let mut sigterm_listener = signal::unix::signal(SignalKind::terminate())
+        .context("Couldn't set up SIGTERM listener")?;
+
+    select! {
+        _ = signal::ctrl_c() => {},
+        _ = sigterm_listener.recv() => {},
+    }
+
+    println!("Performing a graceful shutdown...");
+    cancellation_token.cancel();
+    Ok(())
 }

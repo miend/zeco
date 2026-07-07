@@ -13,6 +13,7 @@ use crate::{
     guarded_socket::GuardedSocket,
     protocol::{EasyCodeRead, EasyCodeWrite},
 };
+use tokio_util::sync::CancellationToken;
 
 #[derive(Debug, Clone)]
 pub struct ZellijSessionInfo {
@@ -80,19 +81,29 @@ pub fn get_current_session() -> Result<ZellijSessionInfo> {
     })
 }
 
-pub async fn host(c: Connection, z: ZellijSessionInfo) -> Result<()> {
+pub async fn host(
+    c: Connection,
+    z: ZellijSessionInfo,
+    cancellation_token: &CancellationToken,
+) -> Result<()> {
     let mut s = c.open_uni().await?;
     s.struct_write(&z.version).await?;
     s.struct_write(&z.name).await?;
     println!("Sent zellij details");
     loop {
         let z = z.clone();
-        let x = c.accept_bi().await;
-        match x {
-            Ok((send, recv)) => {
-                spawn(handle_zellij_session(send, recv, z));
+        tokio::select! {
+            x = c.accept_bi() => {
+                match x {
+                    Ok((send, recv)) => {
+                        spawn(handle_zellij_session(send, recv, z));
+                    }
+                    Err(e) => bail!("Failed to accept channel from guest: {:?}", e),
+                }
             }
-            Err(e) => bail!("Failed to accept channel from guest: {:?}", e),
+            _ = cancellation_token.cancelled() => {
+                return Ok(())
+            }
         }
     }
 }
@@ -127,7 +138,7 @@ async fn handle_zellij_socket(mut socket_stream: UnixStream, c: Connection) -> R
     Ok(())
 }
 
-pub async fn join(c: Connection) -> Result<()> {
+pub async fn join(c: Connection, cancellation_token: &CancellationToken) -> Result<()> {
     let mut s = c.accept_uni().await?;
     let version: String = s.struct_read().await?;
     let name: String = s.struct_read().await?;
@@ -143,12 +154,19 @@ pub async fn join(c: Connection) -> Result<()> {
     println!("Join session with");
     println!("\tzellij a {remote_session_name}");
     loop {
-        match guarded_socket.accept().await {
-            Ok((stream, _)) => {
-                let c = c.clone();
-                spawn(handle_zellij_socket(stream, c));
+        tokio::select! {
+            result = guarded_socket.accept() => {
+                match result {
+                    Ok((stream, _)) => {
+                        let c = c.clone();
+                        spawn(handle_zellij_socket(stream, c));
+                    }
+                    Err(_) => println!("Failed to accept connection on socket."),
+                }
             }
-            Err(_) => println!("Failed to accept connection on socket."),
+            _ = cancellation_token.cancelled() => {
+                    return Ok(())
+            }
         }
     }
 }

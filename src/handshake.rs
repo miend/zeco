@@ -8,6 +8,7 @@ use iroh::{
 };
 use rand::{distributions::Alphanumeric, thread_rng, Rng};
 use std::str::FromStr;
+use tokio_util::sync::CancellationToken;
 
 use crate::zellij::{self, get_current_session};
 
@@ -23,7 +24,7 @@ async fn init_endpoint() -> Result<Endpoint> {
         .map_err(|e| anyhow::anyhow!("failed to bind iroh endpoint: {e}"))
 }
 
-pub async fn handshake_host() -> Result<()> {
+pub async fn handshake_host(cancellation_token: &CancellationToken) -> Result<()> {
     let zellij_info = get_current_session()?;
     println!(
         "Sharing Zellij session {} (version {})",
@@ -62,10 +63,14 @@ pub async fn handshake_host() -> Result<()> {
     drop(send);
     drop(recv);
 
-    zellij::host(connection, zellij_info).await
+    zellij::host(connection, zellij_info, cancellation_token).await
 }
 
-pub async fn handshake_guest(node_id: &str, secret: &str) -> Result<()> {
+pub async fn handshake_guest(
+    node_id: &str,
+    secret: &str,
+    cancellation_token: &CancellationToken,
+) -> Result<()> {
     let endpoint_id: EndpointId = EndpointId::from_str(node_id)?;
     let endpoint = init_endpoint().await?;
 
@@ -82,5 +87,5 @@ pub async fn handshake_guest(node_id: &str, secret: &str) -> Result<()> {
     drop(send);
     drop(recv);
 
-    zellij::join(connection).await
+    zellij::join(connection, cancellation_token).await
 }
