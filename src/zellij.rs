@@ -139,7 +139,7 @@ pub async fn join(c: Connection) -> Result<()> {
         .context("Failed to create zellij directory")?;
     let remote_session_name = format!("{name}-remote");
     let local_socket_path = dir.join(&remote_session_name);
-    let guarded_socket = GuardedSocket::bind(local_socket_path)?;
+    let guarded_socket = GuardedSocket::bind(local_socket_path).await?;
     println!("Join session with");
     println!("\tzellij a {remote_session_name}");
     loop {

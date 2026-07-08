@@ -1,6 +1,6 @@
-use std::path::PathBuf;
+use std::{io::ErrorKind, path::PathBuf};
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use tokio::net::{unix::SocketAddr, UnixListener, UnixStream};
 
 pub struct GuardedSocket {
@@ -13,15 +13,53 @@ impl GuardedSocket {
         Ok(self.listener.as_ref().unwrap().accept().await?)
     }
 
-    pub fn bind(path: PathBuf) -> Result<GuardedSocket> {
+    pub async fn bind(path: PathBuf) -> Result<GuardedSocket> {
+        Self::remove_if_stale(&path).await?;
+
         let listener = UnixListener::bind(&path).context(format!(
             "Failed to create socket file at {}.",
             &path.display()
         ))?;
+
         Ok(GuardedSocket {
             listener: Some(listener),
             path,
         })
+    }
+
+    async fn remove_if_stale(path: &PathBuf) -> Result<()> {
+        // Check to see if a socket already exists and is live
+        let err = match UnixStream::connect(&path).await {
+            Ok(_) => {
+                // success means the socket is live, so something else is using it
+                bail!("Another process is using the live socket at {} -- is another zeco client already running and connected to the same session?", &path.display())
+            }
+            Err(e) => e,
+        };
+
+        match err.kind() {
+            ErrorKind::NotFound | ErrorKind::ConnectionRefused => {}
+            _ => {
+                bail!(
+                    "Couldn't check whether socket file already exists and is live: {}",
+                    err
+                )
+            }
+        };
+
+        // socket file is stale/dangling symlink/nonexistent, safe to remove
+        if let Err(e) = std::fs::remove_file(path) {
+            if e.kind() == ErrorKind::NotFound {
+                // file doesn't exist, carry on
+            } else {
+                bail!(
+                    "Couldn't cleanup an existing socket file before attempting connection: {}",
+                    e
+                )
+            }
+        };
+
+        Ok(())
     }
 }
 
