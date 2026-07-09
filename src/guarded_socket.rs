@@ -18,7 +18,7 @@ impl GuardedSocket {
 
         let listener = UnixListener::bind(&path).context(format!(
             "Failed to create socket file at {}.",
-            &path.display()
+            path.display()
         ))?;
 
         Ok(GuardedSocket {
@@ -32,7 +32,7 @@ impl GuardedSocket {
         let err = match UnixStream::connect(&path).await {
             Ok(_) => {
                 // success means the socket is live, so something else is using it
-                bail!("Another process is using the live socket at {} -- is another zeco client already running and connected to the same session?", &path.display())
+                bail!("Another process is using the live socket at {} -- is another zeco client already running and connected to the same session?", path.display())
             }
             Err(e) => e,
         };
@@ -74,5 +74,48 @@ impl Drop for GuardedSocket {
                 err
             )
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs::exists;
+    use tempfile::tempdir;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn bind_handles_stale_socket_files() -> Result<()> {
+        let dir = tempdir()?;
+        let stale_socket_path = dir.path().join("zeco-test-socket");
+        let stale_socket = UnixListener::bind(&stale_socket_path)
+            .context("Couldn't bind to the test socket path to create a stale socket.")?;
+        drop(stale_socket); // closes file descriptor, but file remains
+        GuardedSocket::bind(stale_socket_path)
+            .await
+            .context("Couldn't bind to stale socket at test_socket_path.")?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn bind_doesnt_remove_live_sockets() -> Result<()> {
+        let dir = tempdir()?;
+        let live_socket_path = dir.path().join("zeco-test-socket");
+        let _live_socket = UnixListener::bind(&live_socket_path)
+            .context("Couldn't bind to the test socket path to create a live socket.")?;
+        assert!(GuardedSocket::bind(live_socket_path.clone()).await.is_err());
+        assert!(exists(live_socket_path).is_ok_and(|file_exists| file_exists));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn guarded_socket_gets_cleaned_up() -> Result<()> {
+        let dir = tempdir()?;
+        let guarded_socket_path = dir.path().join("zeco-test-socket");
+        let guarded_socket = GuardedSocket::bind(guarded_socket_path.clone()).await?;
+        assert!(exists(&guarded_socket_path).is_ok_and(|file_exists| file_exists));
+        drop(guarded_socket);
+        assert!(exists(guarded_socket_path).is_ok_and(|file_exists| !file_exists));
+        Ok(())
     }
 }
