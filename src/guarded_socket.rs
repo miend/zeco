@@ -27,6 +27,10 @@ impl GuardedSocket {
         })
     }
 
+    pub fn path(&self) -> PathBuf {
+        self.path.clone()
+    }
+
     async fn remove_if_stale(path: &PathBuf) -> Result<()> {
         // Check to see if a socket already exists and is live
         let err = match UnixStream::connect(&path).await {

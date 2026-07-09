@@ -3,20 +3,25 @@ mod handshake;
 mod protocol;
 mod zellij;
 
-use std::process::exit;
-
 use anyhow::{Context, Result};
 use clap::Parser;
+use iroh::{endpoint::presets, EndpointId};
 use tokio::{
     select,
     signal::{self, unix::SignalKind},
 };
 use tokio_util::sync::CancellationToken;
+use zellij::get_current_session;
+
+use crate::{
+    handshake::{generate_psk, init_endpoint, Host},
+    zellij::get_base_path,
+};
 
 #[derive(Debug, Parser)]
 pub struct JoinArgs {
     #[arg(help = "Peer to peer Endpoint ID of the host you want to join")]
-    host: String,
+    host: EndpointId,
     #[arg(help = "Pre Shared Secret, also provided by the host")]
     secret: String,
 }
@@ -28,20 +33,38 @@ pub enum Command {
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<()> {
     let args = Command::parse();
     let cancellation_token = CancellationToken::new();
     tokio::spawn(listen_for_shutdown(cancellation_token.clone()));
-    let res = match args {
-        Command::Host => handshake::handshake_host(&cancellation_token).await,
-        Command::Join(args) => {
-            handshake::handshake_guest(&args.host, &args.secret, &cancellation_token).await
-        }
+
+    let zellij_base_path = get_base_path()?;
+
+    let endpoint = async {
+        init_endpoint(presets::N0)
+            .await
+            .context("Failed to bind endpoint")
     };
-    if let Err(e) = res {
-        println!("Error, terminated due to:");
-        println!("{e:#}");
-        exit(1);
+
+    match args {
+        Command::Host => {
+            let session_info = get_current_session()?;
+            let psk = generate_psk();
+            let host = Host::accept(endpoint.await?, session_info, &psk).await?;
+            host.serve(cancellation_token).await
+        }
+
+        Command::Join(args) => {
+            let guest = handshake::Guest::connect(
+                endpoint.await?,
+                zellij_base_path,
+                args.host,
+                &args.secret,
+            )
+            .await?;
+
+            guest.serve(cancellation_token).await
+        }
     }
 }
 
