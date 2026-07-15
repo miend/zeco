@@ -1,6 +1,7 @@
 use std::process::exit;
 
 use clap::Parser;
+mod guarded_socket;
 mod handshake;
 mod protocol;
 mod zellij;

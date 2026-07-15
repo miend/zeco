@@ -7,14 +7,12 @@ use std::{
 use anyhow::{bail, Context, Result};
 use directories::ProjectDirs;
 use iroh::endpoint::{Connection, RecvStream, SendStream};
-use tokio::{
-    fs::create_dir_all,
-    io::copy,
-    net::{UnixListener, UnixStream},
-    spawn,
-};
+use tokio::{fs::create_dir_all, io::copy, net::UnixStream, spawn};
 
-use crate::protocol::{EasyCodeRead, EasyCodeWrite};
+use crate::{
+    guarded_socket::GuardedSocket,
+    protocol::{EasyCodeRead, EasyCodeWrite},
+};
 
 #[derive(Debug, Clone)]
 pub struct ZellijSessionInfo {
@@ -135,17 +133,17 @@ pub async fn join(c: Connection) -> Result<()> {
     let name: String = s.struct_read().await?;
     println!("Remote Session is {name}. You too are expected to use version {version}.");
 
-    let remote_session_name = format!("{name}-remote");
-    let dir = get_base_path()?.join(version).display().to_string();
+    let dir = get_base_path()?.join(version);
     create_dir_all(&dir)
         .await
         .context("Failed to create zellij directory")?;
-    let local_socket = format!("{dir}/{remote_session_name}");
-    let listener = UnixListener::bind(local_socket).context("Failed to create socket file.")?;
+    let remote_session_name = format!("{name}-remote");
+    let local_socket_path = dir.join(&remote_session_name);
+    let guarded_socket = GuardedSocket::bind(local_socket_path).await?;
     println!("Join session with");
     println!("\tzellij a {remote_session_name}");
     loop {
-        match listener.accept().await {
+        match guarded_socket.accept().await {
             Ok((stream, _)) => {
                 let c = c.clone();
                 spawn(handle_zellij_socket(stream, c));
