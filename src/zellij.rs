@@ -2,12 +2,13 @@ use std::{
     env::{self, temp_dir},
     fs::read_dir,
     path::PathBuf,
+    process,
 };
 
 use anyhow::{bail, Context, Result};
 use directories::ProjectDirs;
 use iroh::endpoint::{Connection, RecvStream, SendStream};
-use tokio::{fs::create_dir_all, io::copy, net::UnixStream, spawn};
+use tokio::{fs::create_dir_all, io::copy, net::UnixStream, spawn, task::spawn_blocking};
 
 use crate::{
     guarded_socket::GuardedSocket,
@@ -89,7 +90,6 @@ pub async fn host(
     let mut s = c.open_uni().await?;
     s.struct_write(&z.version).await?;
     s.struct_write(&z.name).await?;
-    println!("Sent zellij details");
     loop {
         let z = z.clone();
         tokio::select! {
@@ -151,8 +151,7 @@ pub async fn join(c: Connection, cancellation_token: &CancellationToken) -> Resu
     let remote_session_name = format!("{name}-remote");
     let local_socket_path = dir.join(&remote_session_name);
     let guarded_socket = GuardedSocket::bind(local_socket_path).await?;
-    println!("Join session with");
-    println!("\tzellij a {remote_session_name}");
+    let _t = spawn_blocking(|| attach_zellij(remote_session_name));
     loop {
         tokio::select! {
             result = guarded_socket.accept() => {
@@ -169,4 +168,26 @@ pub async fn join(c: Connection, cancellation_token: &CancellationToken) -> Resu
             }
         }
     }
+}
+
+pub fn attach_zellij(session_name: String) {
+    let mut p = process::Command::new("zellij");
+    p.arg("attach").arg(&session_name);
+    let mut handle = match p.spawn() {
+        Err(e) => {
+            println!("Tried to run");
+            println!("\tzellij attach {}", session_name);
+            println!("But it failed with {}", e);
+            return;
+        }
+        Ok(v) => v,
+    };
+    let done = handle.wait();
+    if let Err(e) = done {
+        println!("zellij quit with an error:");
+        println!("\t{}", e);
+    }
+    println!("The connection is still open. You can rejoin the session with");
+    println!("\tzellij a {session_name}");
+    println!("or quit with Ctrl + C.")
 }
