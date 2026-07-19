@@ -9,6 +9,7 @@ use anyhow::{bail, Result};
 use directories::ProjectDirs;
 use iroh::endpoint::{Connection, RecvStream, SendStream};
 use tokio::{io::copy, net::UnixStream};
+use tracing::{error, info};
 
 #[derive(Debug, Clone)]
 pub struct ZellijSessionInfo {
@@ -111,19 +112,14 @@ pub fn attach_zellij(session_name: String) {
     p.arg("attach").arg(&session_name);
     let mut handle = match p.spawn() {
         Err(e) => {
-            println!("Tried to run");
-            println!("\tzellij attach {}", session_name);
-            println!("But it failed with {}", e);
+            error!("Failed to spawn `zellij attach {session_name}`: {e}");
             return;
         }
         Ok(v) => v,
     };
     let done = handle.wait();
     if let Err(e) = done {
-        println!("zellij quit with an error:");
-        println!("\t{}", e);
+        error!("zellij quit with an error: {e}");
     }
-    println!("The connection is still open. You can rejoin the session with");
-    println!("\tzellij a {session_name}");
-    println!("or quit with Ctrl + C.")
+    info!("Connection still open. Rejoin with `zellij a {session_name}` or quit with Ctrl+C.");
 }

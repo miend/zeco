@@ -6,6 +6,7 @@ use iroh::{
 use rand::{distributions::Alphanumeric, thread_rng, Rng};
 use tokio::spawn;
 use tokio_util::sync::CancellationToken;
+use tracing::info;
 
 use crate::{
     protocol::EasyCodeWrite,
@@ -36,21 +37,21 @@ impl Host {
         psk: &str,
     ) -> Result<Host> {
         // TODO: Move much of the message printing up to the CLI layer
-        println!(
-            "Sharing Zellij session {} (version {})",
+        info!(
+            "Sharing Zellij session '{}' (version {})",
             session_info.name, session_info.version
         );
-        println!("The guest now can join with the following command:");
-        println!("\tzeco join {} {}", endpoint.id(), psk);
-        println!(
+        info!("The guest can join with:");
+        info!("\tzeco join {} {}", endpoint.id(), psk);
+        info!(
             "WARNING! Everyone with these credentials can execute arbitrary commands in your shell. \
             Only hand over to people you fully trust."
         );
-        println!("Waiting for guest to join. Press Ctrl-C to quit.");
+        info!("Waiting for guest to join. Press Ctrl-C to quit.");
 
         let incoming: Incoming = endpoint.accept().await.unwrap();
         let connection = incoming.accept()?.await?;
-        println!("Connection established.");
+        info!("Connection established.");
 
         let (mut send, mut recv) = connection.accept_bi().await?;
         assert_eq!(psk.len(), 32); // String::length is in bytes
@@ -62,7 +63,7 @@ impl Host {
         }
         send.write_all(&[1]).await?;
         send.finish()?;
-        println!("Guest authenticated successfully!");
+        info!("Guest authenticated successfully!");
         drop(send);
         drop(recv);
 

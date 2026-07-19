@@ -4,6 +4,7 @@ use anyhow::{bail, Context, Result};
 use iroh::{endpoint::Connection, Endpoint, EndpointAddr};
 use tokio::{fs::create_dir_all, spawn};
 use tokio_util::sync::CancellationToken;
+use tracing::{error, info};
 
 use crate::{
     guarded_socket::GuardedSocket,
@@ -36,14 +37,14 @@ impl Guest {
         if success != [1] {
             bail!("Host declined provided secret.");
         }
-        println!("Host let you in.");
+        info!("Host let you in.");
         drop(send);
         drop(recv);
 
         let mut stream = connection.accept_uni().await?;
         let version: String = stream.struct_read().await?;
         let name: String = stream.struct_read().await?;
-        println!("Remote Session is {name}. You too are expected to use version {version}.");
+        info!("Remote session is '{name}'. You too are expected to use version {version}.");
 
         let dir = zellij_base_path.join(version);
         create_dir_all(&dir)
@@ -70,7 +71,7 @@ impl Guest {
                             let c = self.connection.clone();
                             spawn(zellij::handle_zellij_socket(stream, c));
                         }
-                        Err(_) => println!("Failed to accept connection on socket."),
+                        Err(_) => error!("Failed to accept connection on socket."),
                     }
                 }
                 _ = cancellation_token.cancelled() => {
