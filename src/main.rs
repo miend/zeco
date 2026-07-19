@@ -17,6 +17,7 @@ use iroh::{
 use tokio::{
     select,
     signal::{self, unix::SignalKind},
+    task::spawn_blocking,
 };
 use tokio_util::sync::CancellationToken;
 use zellij::get_current_session;
@@ -24,7 +25,7 @@ use zellij::get_current_session;
 use crate::{
     host::{generate_psk, Host},
     protocol::ALPN,
-    zellij::get_base_path,
+    zellij::{attach_zellij, get_base_path},
 };
 
 #[derive(Debug, Parser)]
@@ -68,6 +69,8 @@ async fn main() -> Result<()> {
                 guest::Guest::connect(endpoint.await?, zellij_base_path, args.host, &args.secret)
                     .await?;
 
+            let session_name = guest.session_name();
+            let _attach = spawn_blocking(|| attach_zellij(session_name));
             guest.serve(cancellation_token).await
         }
     }

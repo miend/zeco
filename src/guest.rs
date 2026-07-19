@@ -16,6 +16,7 @@ pub struct Guest {
     // We store the endpoint in the struct to keep it alive. When it goes out of scope, iroh
     // machinery is shut down
     _endpoint: Endpoint,
+    remote_session_name: String,
     socket: GuardedSocket,
 }
 
@@ -55,13 +56,12 @@ impl Guest {
         Ok(Guest {
             connection,
             _endpoint: endpoint,
+            remote_session_name,
             socket,
         })
     }
 
     pub async fn serve(&self, cancellation_token: CancellationToken) -> Result<()> {
-        // TODO: Move this to main and re-enable
-        // let _t = spawn_blocking(|| attach_zellij(remote_session_name));
         loop {
             tokio::select! {
                 result = self.socket.accept() => {
@@ -83,5 +83,9 @@ impl Guest {
     #[cfg_attr(not(test), expect(dead_code))]
     pub fn socket_path(&self) -> PathBuf {
         self.socket.path()
+    }
+
+    pub fn session_name(&self) -> String {
+        self.remote_session_name.clone()
     }
 }

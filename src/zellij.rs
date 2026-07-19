@@ -106,7 +106,7 @@ pub async fn handle_zellij_socket(mut socket_stream: UnixStream, c: Connection) 
     Ok(())
 }
 
-pub fn _attach_zellij(session_name: String) {
+pub fn attach_zellij(session_name: String) {
     let mut p = process::Command::new("zellij");
     p.arg("attach").arg(&session_name);
     let mut handle = match p.spawn() {
