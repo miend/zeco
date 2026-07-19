@@ -8,7 +8,7 @@ use tracing::{error, info};
 
 use crate::{
     guarded_socket::GuardedSocket,
-    protocol::{EasyCodeRead, ALPN},
+    protocol::{EasyCodeRead, PreSharedKey, ALPN},
     zellij::{self},
 };
 
@@ -26,7 +26,7 @@ impl Guest {
         endpoint: Endpoint,
         zellij_base_path: PathBuf,
         host_endpoint_addr: impl Into<EndpointAddr>,
-        psk: &str,
+        psk: &PreSharedKey,
     ) -> Result<Guest> {
         let connection = endpoint.connect(host_endpoint_addr, ALPN).await?;
         let (mut send, mut recv) = connection.open_bi().await?;

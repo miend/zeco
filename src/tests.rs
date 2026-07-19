@@ -12,10 +12,7 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    guest::Guest,
-    host::{generate_psk, Host},
-    init_endpoint,
-    zellij::ZellijSessionInfo,
+    guest::Guest, host::Host, init_endpoint, protocol::PreSharedKey, zellij::ZellijSessionInfo,
 };
 
 // This performs host and guest side setups and sends bytes across the wire, confirming that
@@ -46,7 +43,7 @@ async fn host_and_guest_complete_roundtrip() -> Result<()> {
     let guest_endpoint = init_endpoint(presets::Minimal)
         .await
         .context("Failed to bind guest endpoint")?;
-    let psk = generate_psk();
+    let psk = PreSharedKey::generate();
 
     let (host, guest) = try_join!(
         Host::accept(host_endpoint, session_info, &psk),

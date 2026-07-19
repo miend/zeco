@@ -3,23 +3,14 @@ use iroh::{
     endpoint::{Connection, Incoming},
     Endpoint,
 };
-use rand::{distributions::Alphanumeric, thread_rng, Rng};
 use tokio::spawn;
 use tokio_util::sync::CancellationToken;
 use tracing::info;
 
 use crate::{
-    protocol::EasyCodeWrite,
+    protocol::{EasyCodeWrite, PreSharedKey},
     zellij::{self, ZellijSessionInfo},
 };
-
-pub fn generate_psk() -> String {
-    thread_rng()
-        .sample_iter(&Alphanumeric)
-        .take(32)
-        .map(char::from)
-        .collect()
-}
 
 #[derive(Debug)]
 pub struct Host {
@@ -34,7 +25,7 @@ impl Host {
     pub async fn accept(
         endpoint: Endpoint,
         session_info: ZellijSessionInfo,
-        psk: &str,
+        psk: &PreSharedKey,
     ) -> Result<Host> {
         // TODO: Move much of the message printing up to the CLI layer
         info!(
@@ -54,10 +45,9 @@ impl Host {
         info!("Connection established.");
 
         let (mut send, mut recv) = connection.accept_bi().await?;
-        assert_eq!(psk.len(), 32); // String::length is in bytes
-        let mut buf = [0; 32];
+        let mut buf = [0; PreSharedKey::LEN];
         recv.read_exact(&mut buf).await?;
-        if buf != psk.as_bytes() {
+        if buf != *psk.as_bytes() {
             send.write_all(&[0]).await?;
             bail!("Guest provided wrong secret. Quit.");
         }

@@ -24,8 +24,8 @@ use tracing::info;
 use zellij::get_current_session;
 
 use crate::{
-    host::{generate_psk, Host},
-    protocol::ALPN,
+    host::Host,
+    protocol::{PreSharedKey, ALPN},
     zellij::{attach_zellij, get_base_path},
 };
 
@@ -34,7 +34,7 @@ pub struct JoinArgs {
     #[arg(help = "Peer to peer Endpoint ID of the host you want to join")]
     host: EndpointId,
     #[arg(help = "Pre Shared Secret, also provided by the host")]
-    secret: String,
+    secret: PreSharedKey,
 }
 
 #[derive(Parser, Debug)]
@@ -64,7 +64,7 @@ async fn main() -> Result<()> {
     match args {
         Command::Host => {
             let session_info = get_current_session()?;
-            let psk = generate_psk();
+            let psk = PreSharedKey::generate();
             let host = Host::accept(endpoint.await?, session_info, &psk).await?;
             host.serve(cancellation_token).await
         }
