@@ -1,11 +1,19 @@
 mod guarded_socket;
-mod handshake;
+mod guest;
+mod host;
 mod protocol;
 mod zellij;
 
+// For larger integration-like tests that don't belong strictly to one module
+#[cfg(test)]
+mod tests;
+
 use anyhow::{Context, Result};
 use clap::Parser;
-use iroh::{endpoint::presets, EndpointId};
+use iroh::{
+    endpoint::presets::{self, Preset},
+    Endpoint, EndpointId, SecretKey,
+};
 use tokio::{
     select,
     signal::{self, unix::SignalKind},
@@ -14,7 +22,8 @@ use tokio_util::sync::CancellationToken;
 use zellij::get_current_session;
 
 use crate::{
-    handshake::{generate_psk, init_endpoint, Host},
+    host::{generate_psk, Host},
+    protocol::ALPN,
     zellij::get_base_path,
 };
 
@@ -55,13 +64,9 @@ async fn main() -> Result<()> {
         }
 
         Command::Join(args) => {
-            let guest = handshake::Guest::connect(
-                endpoint.await?,
-                zellij_base_path,
-                args.host,
-                &args.secret,
-            )
-            .await?;
+            let guest =
+                guest::Guest::connect(endpoint.await?, zellij_base_path, args.host, &args.secret)
+                    .await?;
 
             guest.serve(cancellation_token).await
         }
@@ -80,4 +85,14 @@ async fn listen_for_shutdown(cancellation_token: CancellationToken) -> Result<()
     println!("Performing a graceful shutdown...");
     cancellation_token.cancel();
     Ok(())
+}
+
+pub async fn init_endpoint(preset: impl Preset) -> Result<Endpoint> {
+    let secret_key = SecretKey::generate();
+    Endpoint::builder(preset)
+        .secret_key(secret_key)
+        .alpns(vec![ALPN.to_vec()])
+        .bind()
+        .await
+        .map_err(|e| anyhow::anyhow!("failed to bind iroh endpoint: {e}"))
 }

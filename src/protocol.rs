@@ -2,6 +2,8 @@ use anyhow::Result;
 use iroh::endpoint::{RecvStream, SendStream};
 use serde::{de::DeserializeOwned, Serialize};
 
+pub const ALPN: &[u8] = &[3, 1, 4, 1, 5, 9, 2, 6];
+
 pub trait EasyCodeWrite {
     async fn struct_write<T: Serialize>(&mut self, t: &T) -> Result<()>;
 }
