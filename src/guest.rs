@@ -80,6 +80,7 @@ impl Guest {
         }
     }
 
+    #[cfg_attr(not(test), expect(dead_code))]
     pub fn socket_path(&self) -> PathBuf {
         self.socket.path()
     }
