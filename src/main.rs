@@ -23,6 +23,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::info;
 
 use crate::{
+    guest::Guest,
     host::Host,
     protocol::{PreSharedKey, ALPN},
     zellij::{attach_zellij, get_base_path, get_current_session},
@@ -82,8 +83,7 @@ async fn main() -> Result<()> {
 
         Command::Join(args) => {
             let guest =
-                guest::Guest::connect(endpoint.await?, zellij_base_path, args.host, &args.secret)
-                    .await?;
+                Guest::connect(endpoint.await?, zellij_base_path, args.host, &args.secret).await?;
 
             let session_name = guest.session_name();
             let _attach = spawn_blocking(|| attach_zellij(session_name));
