@@ -21,12 +21,11 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 use tracing::info;
-use zellij::get_current_session;
 
 use crate::{
     host::Host,
     protocol::{PreSharedKey, ALPN},
-    zellij::{attach_zellij, get_base_path},
+    zellij::{attach_zellij, get_base_path, get_current_session},
 };
 
 #[derive(Debug, Parser)]
@@ -65,7 +64,19 @@ async fn main() -> Result<()> {
         Command::Host => {
             let session_info = get_current_session()?;
             let psk = PreSharedKey::generate();
-            let host = Host::accept(endpoint.await?, session_info, &psk).await?;
+            let endpoint = endpoint.await?;
+
+            println!(
+                "Sharing Zellij session '{}' (version {})\n\
+                 The guest can join with:\n\
+                 \tzeco join {} {}\n\
+                 WARNING! Everyone with these credentials can execute arbitrary commands in your shell. \
+                 Only hand over to people you fully trust.\n\
+                 Waiting for guest to join. Press Ctrl-C to quit.",
+                session_info.name, session_info.version, endpoint.id(), psk
+            );
+
+            let host = Host::accept(endpoint, session_info, &psk).await?;
             host.serve(cancellation_token).await
         }
 
@@ -95,7 +106,7 @@ async fn listen_for_shutdown(cancellation_token: CancellationToken) -> Result<()
     Ok(())
 }
 
-pub async fn init_endpoint(preset: impl Preset) -> Result<Endpoint> {
+async fn init_endpoint(preset: impl Preset) -> Result<Endpoint> {
     let secret_key = SecretKey::generate();
     Endpoint::builder(preset)
         .secret_key(secret_key)

@@ -71,11 +71,11 @@ impl Guest {
                             let c = self.connection.clone();
                             spawn(zellij::handle_zellij_socket(stream, c));
                         }
-                        Err(_) => error!("Failed to accept connection on socket."),
+                        Err(e) => error!("Failed to accept connection on socket, {}", e),
                     }
                 }
                 _ = cancellation_token.cancelled() => {
-                        return Ok(())
+                    return Ok(())
                 }
             }
         }
