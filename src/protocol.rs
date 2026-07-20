@@ -5,6 +5,7 @@ use anyhow::{anyhow, Result};
 use iroh::endpoint::{RecvStream, SendStream};
 use rand::{distributions::Alphanumeric, thread_rng, Rng};
 use serde::{de::DeserializeOwned, Serialize};
+use tokio::{io::copy, net::UnixStream};
 
 pub const ALPN: &[u8] = &[3, 1, 4, 1, 5, 9, 2, 6];
 
@@ -72,4 +73,21 @@ impl Display for PreSharedKey {
         let s = str::from_utf8(&self.0).expect("Psk bytes are valid UTF-8");
         f.write_str(s)
     }
+}
+
+// Helper to shuffle bytes between zellij socket and iroh connection
+pub async fn proxy(
+    mut iroh_send: SendStream,
+    mut iroh_recv: RecvStream,
+    mut stream: UnixStream,
+) -> Result<()> {
+    let (mut socket_read, mut socket_write) = stream.split();
+
+    let a = copy(&mut socket_read, &mut iroh_send);
+    let b = copy(&mut iroh_recv, &mut socket_write);
+
+    let (a, b) = tokio::join!(a, b);
+    a?;
+    b?;
+    Ok(())
 }

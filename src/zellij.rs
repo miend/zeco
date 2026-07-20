@@ -7,8 +7,6 @@ use std::{
 
 use anyhow::{bail, Result};
 use directories::ProjectDirs;
-use iroh::endpoint::{Connection, RecvStream, SendStream};
-use tokio::{io::copy, net::UnixStream};
 use tracing::{error, info};
 
 #[derive(Debug, Clone)]
@@ -75,36 +73,6 @@ pub fn get_current_session() -> Result<ZellijSessionInfo> {
         version: version.to_string_lossy().to_string(),
         name: session_name,
     })
-}
-
-pub async fn handle_zellij_session(
-    mut send: SendStream,
-    mut recv: RecvStream,
-    z: ZellijSessionInfo,
-) -> Result<()> {
-    let mut u = UnixStream::connect(z.path).await?;
-    let (mut socket_read, mut socket_write) = u.split();
-
-    let a = copy(&mut socket_read, &mut send);
-    let b = copy(&mut recv, &mut socket_write);
-
-    let (a, b) = tokio::join!(a, b);
-    a?;
-    b?;
-    Ok(())
-}
-
-pub async fn handle_zellij_socket(mut socket_stream: UnixStream, c: Connection) -> Result<()> {
-    let (mut iroh_send, mut iroh_recv) = c.open_bi().await?;
-    let (mut sock_read, mut sock_write) = socket_stream.split();
-
-    let a = copy(&mut sock_read, &mut iroh_send);
-    let b = copy(&mut iroh_recv, &mut sock_write);
-
-    let (a, b) = tokio::join!(a, b);
-    a?;
-    b?;
-    Ok(())
 }
 
 pub fn attach_zellij(session_name: String) {

@@ -8,8 +8,7 @@ use tracing::{error, info};
 
 use crate::{
     guarded_socket::GuardedSocket,
-    protocol::{EasyCodeRead, PreSharedKey, ALPN},
-    zellij::{self},
+    protocol::{proxy, EasyCodeRead, PreSharedKey, ALPN},
 };
 
 pub struct Guest {
@@ -68,8 +67,15 @@ impl Guest {
                 result = self.socket.accept() => {
                     match result {
                         Ok((stream, _)) => {
-                            let c = self.connection.clone();
-                            spawn(zellij::handle_zellij_socket(stream, c));
+                            let connection = self.connection.clone();
+                            // We never await the JoinHandle, so the task's Result would be dropped unseen;
+                            // we should refactor this if those errors are important to capture
+                            // outside logs emitted within proxy()
+                            spawn(async move {
+                                let (send, recv) = connection.open_bi().await?;
+                                proxy(send, recv, stream).await?;
+                                Ok::<(), anyhow::Error>(())
+                            });
                         }
                         Err(e) => error!("Failed to accept connection on socket, {}", e),
                     }

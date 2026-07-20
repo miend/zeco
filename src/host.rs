@@ -3,13 +3,13 @@ use iroh::{
     endpoint::{Connection, Incoming},
     Endpoint,
 };
-use tokio::spawn;
+use tokio::{net::UnixStream, spawn};
 use tokio_util::sync::CancellationToken;
 use tracing::info;
 
 use crate::{
-    protocol::{EasyCodeWrite, PreSharedKey},
-    zellij::{self, ZellijSessionInfo},
+    protocol::{proxy, EasyCodeWrite, PreSharedKey},
+    zellij::ZellijSessionInfo,
 };
 
 #[derive(Debug)]
@@ -66,7 +66,11 @@ impl Host {
                     match x {
                         Ok((send, recv)) => {
                             let z = self.session_info.clone();
-                            spawn(zellij::handle_zellij_session(send, recv, z));
+                            spawn(async move {
+                                let stream = UnixStream::connect(z.path).await?;
+                                proxy(send, recv, stream).await?;
+                                Ok::<(), anyhow::Error>(())
+                            });
                         }
                         Err(e) => bail!("Failed to accept channel from guest: {:?}", e),
                     }
